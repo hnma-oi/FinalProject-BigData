@@ -5,7 +5,7 @@ library(reshape2)
 library(ggplot2)
 library(dplyr)
 library(lubridate)
-
+library(forecast)
 
 ## Disease 1, Influenza ("flu", "influenza") October to March
 ## Disease 2, Pollen allergies ("pollen", "allergies") March to June
@@ -199,57 +199,142 @@ ggsave("TimeSeriesPlot.png", width = 8, height = 6, dpi = 300)
 ####################################
 #
 # Time Series Analysis Using ARIMA Model
-# The ARIMA (AutoRegressive Integrated Moving Average) 
+# The ARIMA (Auto Regressive Integrated Moving Average) 
 # to predict future values in a time series 
 # based on past trends and pattern
 #
 ####################################
  
 # Step 1: Convert Data to a Time Series Object
-# Convert the 'anxiety' data into a time series object
-# Start in 2014 with 52 observations per year (weekly data)
-ts1 <- ts(reshaped_data$anxiety, start = 2014, frequency = 52)
+# Sum the two keywords for each disease of the diseases to create a time series object
+influenza_cons <- df_influenza %>%
+  filter(keyword %in% c("flu", "influenza")) %>%  # Filter rows for "flu" and "influenza"
+  group_by(date) %>%  # Group by the "date" column
+  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
 
-# Step 2: Split the Time Series into Training and Test Data
-# Use the first 208 weeks (2014–2018) as training data
-ts2 <- ts(ts1[c(1:208)], start = 2014, frequency = 52)
- 
-# Use the remaining weeks (2018 onwards) as holdout data for validation
-hold <- ts(ts1[c(209:260)], start = 2018, frequency = 52)
+pollen_cons <- df_pollen %>%
+  filter(keyword %in% c("pollen", "allergies")) %>%  # Filter rows for "pollen" and "allergies"
+  group_by(date) %>%  # Group by the "date" column
+  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
 
-# Step 3: Fit an ARIMA Model
-# Automatically find the best ARIMA model based on the training data
-fit <- auto.arima(ts2, stepwise = FALSE, approximation = FALSE)
+SAD_cons <- df_SAD %>%
+  filter(keyword %in% c("depression", "sleep disorder")) %>%  # Filter rows for "depression" and "sleep disorder"
+  group_by(date) %>%  # Group by the "date" column
+  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
 
-# Step 4: Forecast Future Values
-# Forecast for the next 3 years (52 weeks per year)
-fcasts <- forecast(fit, h = 52 * 3, level = 95)
+cold_weather_cons <- df_cold_weather %>%
+  filter(keyword %in% c("dry skin", "hypothermia")) %>%  # Filter rows for "dry skin" and "hypothermia"
+  group_by(date) %>%  # Group by the "date" column
+  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
 
-# Step 5: Plot the Forecast
-# Plot the forecast with training data and holdout data
-plot(fcasts, main = "ARIMA Forecast of Anxiety Levels", 
-     ylim = c(0, 100))
-lines(hold, col = 'red', type = "l")  # Add the holdout data in red
+heatwave_cons <- df_heatwave %>%
+  filter(keyword %in% c("dehydration", "sunburn")) %>%  # Filter rows for "dehydration" and "sunburn"
+  group_by(date) %>%  # Group by the "date" column
+  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
 
-# Add vertical lines for spring (March–May) in each year
-spring <- c(
-  2014 + 9 / 52, 2014 + 21 / 52,  # Spring 2014
-  2015 + 9 / 52, 2015 + 21 / 52,  # Spring 2015
-  2016 + 9 / 52, 2016 + 21 / 52,  # Spring 2016
-  2017 + 9 / 52, 2017 + 21 / 52,  # Spring 2017
-  2018 + 9 / 52, 2018 + 21 / 52,  # Spring 2018
-  2019 + 9 / 52, 2019 + 21 / 52,  # Spring 2019
-  2020 + 9 / 52, 2020 + 21 / 52   # Spring 2020
-)
-abline(v = spring, lty = 2, lwd = 1)  # Dashed vertical lines for spring
 
-# Step 6: Evaluate Forecast Accuracy
-# Compare the forecasted values with the actual holdout data
-accuracy(fcasts, x = hold)
+# Convert the data to time series format (assuming 'value' column contains the data)
+influenza_ts <- ts(influenza_cons$avg.hits, start = c(2022, 1), frequency = 52.18)
+pollen_ts <- ts(pollen_cons$avg.hits, start = c(2022, 1), frequency = 52.18)
+SAD_ts <- ts(SAD_cons$avg.hits, start = c(2022, 1), frequency = 52.18)
+cold_weather_ts <- ts(cold_weather_cons$avg.hits, start = c(2022, 1), frequency = 52.18)
+heatwave_ts <- ts(heatwave_cons$avg.hits, start = c(2022, 1), frequency = 52.18)
 
-# Step 7: Check Residuals
-# Calculate residuals (differences between predictions and actual data)
-res <- residuals(fit)
+# Plot the time series data
+ggplot(influenza_ts, aes(x = time(influenza_ts), y = influenza_ts)) +
+  geom_line(color = "blue", linewidth = 1) +  # Add line graph
+  geom_point(color = "blue", size = 3) +      # Add points for each data point
+  labs(
+    title = "Influenza Time Series",
+    x = "Time",
+    y = "Influenza Count"
+  ) +
+  theme_minimal()
 
-# Perform the Ljung-Box test to check if residuals are random (white noise)
-Box.test(res, type = "Lj")
+ggplot(pollen_ts, aes(x = time(pollen_ts), y = pollen_ts)) +
+  geom_line(color = "green", linewidth = 1) +  # Add line graph
+  geom_point(color = "green", size = 3) +      # Add points for each data point
+  labs(
+    title = "Pollen Time Series",
+    x = "Time",
+    y = "Pollen Count"
+  ) +
+  theme_minimal()
+
+ggplot(SAD_ts, aes(x = time(SAD_ts), y = SAD_ts)) +
+  geom_line(color = "red", linewidth = 1) +  # Add line graph
+  geom_point(color = "red", size = 3) +      # Add points for each data point
+  labs(
+    title = "SAD Time Series",
+    x = "Time",
+    y = "SAD Count"
+  ) +
+  theme_minimal()
+
+ggplot(cold_weather_ts, aes(x = time(cold_weather_ts), y = cold_weather_ts)) +
+  geom_line(color = "orange", linewidth = 1) +  # Add line graph
+  geom_point(color = "orange", size = 3) +      # Add points for each data point
+  labs(
+    title = "Cold Weather Time Series",
+    x = "Time",
+    y = "Cold Weather Count"
+  ) +
+  theme_minimal()
+
+ggplot(heatwave_ts, aes(x = time(heatwave_ts), y = heatwave_ts)) +
+  geom_line(color = "yellow", linewidth = 1) +  # Add line graph
+  geom_point(color = "yellow", size = 3) +      # Add points for each data point
+  labs(
+    title = "Heatwave Time Series",
+    x = "Time",
+    y = "Heatwave Count"
+  ) +
+  theme_minimal()
+
+
+# Plot the time series
+plot(pollen_ts, main = "Pollen Time Series", xlab = "Time", ylab = "Pollen Count")
+plot(influenza_ts, main = "Influenza Time Series", xlab = "Time", ylab = "Influenza Count")
+plot(SAD_ts, main = "SAD Time Series", xlab = "Time", ylab = "SAD Count")
+plot(cold_weather_ts, main = "Cold Weather Time Series", xlab = "Time", ylab = "Cold Weather Count")
+plot(heatwave_ts, main = "Heatwave Time Series", xlab = "Time", ylab = "Heatwave Count")
+
+
+# Fit ARIMA model for eacg of the disease
+arima_pollen <- auto.arima(pollen_ts)
+arima_influenza <- auto.arima(influenza_ts)
+arima_SAD <- auto.arima(SAD_ts)
+arima_cold_weather <- auto.arima(cold_weather_ts)
+arima_heatwave <- auto.arima(heatwave_ts)
+
+# Summary of ARIMA model for each of the disease
+summary(arima_pollen)
+summary(arima_influenza)
+summary(arima_SAD)
+summary(arima_cold_weather)
+summary(arima_heatwave)
+
+# Forecast future values using ARIMA model
+# Forecast the next 12 months for each of the disease
+forecast_pollen <- forecast(arima_pollen, h = 52)
+forecast_influenza <- forecast(arima_influenza, h = 52)
+forecast_SAD <- forecast(arima_SAD, h = 52)
+forecast_cold_weather <- forecast(arima_cold_weather, h = 52)
+forecast_heatwave <- forecast(arima_heatwave, h = 52)
+
+# Plot forecast for Pollen
+plot(forecast_pollen, main = "Pollen Allergies Forecast")
+plot(forecast_influenza, main = "Influenza Forecast")
+plot(forecast_SAD, main = "SAD Forecast")
+plot(forecast_cold_weather, main = "Cold Weather Forecast")
+plot(forecast_heatwave, main = "Heatwave Forecast")
+
+# Evaluate the accuracy of the Pollen forecast
+accuracy(forecast_pollen)
+accuracy(forecast_influenza)
+accuracy(forecast_SAD)
+accuracy(forecast_cold_weather)
+(forecast_heatwave)
+
+
+
