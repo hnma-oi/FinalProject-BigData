@@ -72,6 +72,12 @@ for (symptom in names(symptoms)) {
   write.csv(symptoms[[symptom]], filename, fileEncoding = "UTF-8", row.names = FALSE)
 }
 
+# ## In case of GTrends query not being possible due to Google API Limit, we can load the data from the CSV files
+# df_influenza <- read.csv("TrendData/Influenza106_0914_2025.csv", header = TRUE)
+# df_pollen <- read.csv("TrendData/Pollen106_0914_2025.csv", header = TRUE)
+# df_SAD <- read.csv("TrendData/SAD106_0914_2025.csv", header = TRUE)
+# df_cold_weather <- read.csv("TrendData/cold_Weather106_0914_2025.csv", header = TRUE)
+# df_heatwave <- read.csv("TrendData/Heatwave106_0914_2025.csv", header = TRUE)
 
 # Manipulate the data from result to create a time series plot
 consolidated <- rbind(df_influenza, df_pollen, df_SAD, df_cold_weather, df_heatwave)
@@ -288,23 +294,59 @@ summary(arima_heatwave)
 
 # Forecast future values using ARIMA model
 # Forecast the next 12 months for each of the disease
-forecast_pollen <- forecast(arima_pollen, h = 52)
 forecast_influenza <- forecast(arima_influenza, h = 52)
+forecast_pollen <- forecast(arima_pollen, h = 52)
 forecast_SAD <- forecast(arima_SAD, h = 52)
 forecast_cold_weather <- forecast(arima_cold_weather, h = 52)
 forecast_heatwave <- forecast(arima_heatwave, h = 52)
 
 # Plot forecast for Pollen
-plot(forecast_pollen, main = "Pollen Allergies Forecast")
 plot(forecast_influenza, main = "Influenza Forecast")
+plot(forecast_pollen, main = "Pollen Allergies Forecast")
 plot(forecast_SAD, main = "SAD Forecast")
 plot(forecast_cold_weather, main = "Cold Weather Forecast")
 plot(forecast_heatwave, main = "Heatwave Forecast")
 
 # Evaluate the accuracy of the Pollen forecast
-accuracy(forecast_pollen)
 accuracy(forecast_influenza)
+accuracy(forecast_pollen)
 accuracy(forecast_SAD)
 accuracy(forecast_cold_weather)
 accuracy(forecast_heatwave)
 
+## Validating the ARIMA Model Predictions by comparing the predictions of the model to the actual search volume data of September to December 2024
+# Create for the time-series search volume data from January 2022 to September 2024 for each of the seasonal disease
+# Subset the data for January 2022 to September 2024
+training_data_Influenza <- subset(influenza_cons, date >= as.Date("2022-01-01") & date <= as.Date("2024-09-30"))
+
+plot(training_data_Influenza, main = "Influenza Forecast")
+
+influenza_ts_training <- ts(training_data_Influenza$avg.hits, 
+                   start = c(2022, 1), 
+                   frequency = 52)  # Weekly data
+
+# Generate the predictions for the period of September to December 2024
+# Fit the ARIMA model to data up to September 2024
+arima_model_Test <- auto.arima(influenza_ts_training)
+
+# Forecast for October to December 2024
+forecast_oct_dec_Influenza <- forecast(arima_model_Test, h = 13)  # h = 3 months
+
+# View the first few observations
+head(influenza_ts_training)
+
+# Plot the time series
+plot(forecast_oct_dec_Influenza, main = "Influenza Search Volume ARIMA Forecast Validation", 
+     xlab = "Time", ylab = "Average Hits", col = "blue", type = "o")
+
+predicted_values <- forecast_oct_dec_Influenza$mean
+
+# Print the predicted values
+print(predicted_values)
+
+# Compare the actual and predicted values for October to December 2024
+comparison <- data.frame(
+  Month = c("October", "November", "December"),
+  Actual = influenza_cons,  # Replace with your actual data
+  Predicted = forecast_oct_dec_Influenza$mean  # Predicted values
+)
