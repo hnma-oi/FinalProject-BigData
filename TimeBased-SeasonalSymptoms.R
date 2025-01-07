@@ -7,6 +7,7 @@ library(dplyr)
 library(lubridate)
 library(forecast)
 
+
 ## Disease 1, Influenza ("flu", "influenza") October to March
 ## Disease 2, Pollen allergies ("pollen", "allergies") March to June
 ## Disease 3, Cold weather symptoms ("dry skin", "hypothermia", "frostbite") December to February
@@ -18,6 +19,7 @@ library(forecast)
 
 Sys.setenv(TZ = "America/New_York")
 
+# GTrends command to fetch all of the search volume data for the selected keywords in one go, but it may exceed the API limit and return an error 
 # # Lists of keywords
 # keywords.All <- c("flu", "influenza", "pollen", "allergies", "dry skin", "hypothermia", "frostbite", "depression", "sleep disorder", "heatstroke", "dehydration", "sunburn")
 # 
@@ -47,97 +49,74 @@ cold_weather <- gtrends(keyword = c("dry skin", "hypothermia"), geo = "US", time
 SAD <- gtrends(keyword = c("depression", "sleep disorder"), geo = "US", time = "2022-01-01 2024-12-31")
 heatwave <- gtrends(keyword = c("dehydration", "sunburn"), geo = "US", time = "2022-01-01 2024-12-31")
 
-#convert the data to a data frame and only get the interest over time
+#convert the data to a data frame and only get the interest over time for each of the seasonal disease
 df_influenza <- data.frame(influenza$interest_over_time)
-df_pollen <- data.frame(pollen$interest_over_time)
+df_pollen_allergies <- data.frame(pollen$interest_over_time)
 df_cold_weather <- data.frame(cold_weather$interest_over_time)
-df_SAD <- data.frame(SAD$interest_over_time)
+df_sad <- data.frame(SAD$interest_over_time)
 df_heatwave <- data.frame(heatwave$interest_over_time)
 
-# Combine results
+# Combine all of the results into a list
 result <- list(influenza = df_influenza, pollen = df_pollen, cold_weather = df_cold_weather, SAD = df_SAD, heatwave = df_heatwave)
 
 # Copy the selected data from the Google Trends query and back it up to a csv file
-filename <- paste("TrendData/",  "Influenza",
-                  format(Sys.time(), "%b%d_%H%M_%Y"),'.csv', sep = "")
-write.csv(df_influenza, filename, fileEncoding = "UTF-8", row.names = FALSE)
+symptoms <- list("Influenza" = df_influenza, 
+                 "Pollen" = df_pollen, 
+                 "cold_weather" = df_cold_weather, 
+                 "Seasonal Affective Disorder" = df_SAD, 
+                 "Heatwave" = df_heatwave)
 
-filename <- paste("TrendData/",  "Pollen",
-                  format(Sys.time(), "%b%d_%H%M_%Y"),'.csv', sep = "")
-write.csv(df_pollen, filename, fileEncoding = "UTF-8", row.names = FALSE)
+for (symptom in names(symptoms)) {
+  filename <- paste("TrendData/", symptom, 
+                    format(Sys.time(), "%b%d_%H%M_%Y"), '.csv', sep = "")
+  write.csv(symptoms[[symptom]], filename, fileEncoding = "UTF-8", row.names = FALSE)
+}
 
-filename <- paste("TrendData/",  "cold_weather",
-                  format(Sys.time(), "%b%d_%H%M_%Y"),'.csv', sep = "")
-write.csv(df_cold_weather, filename, fileEncoding = "UTF-8", row.names = FALSE)
-
-filename <- paste("TrendData/",  "SAD",
-                  format(Sys.time(), "%b%d_%H%M_%Y"),'.csv', sep = "")
-write.csv(df_SAD, filename, fileEncoding = "UTF-8", row.names = FALSE)
-
-filename <- paste("TrendData/",  "Heatwave",
-                  format(Sys.time(), "%b%d_%H%M_%Y"),'.csv', sep = "")
-write.csv(df_heatwave, filename, fileEncoding = "UTF-8", row.names = FALSE)
 
 # Manipulate the data from result to create a time series plot
-consolidateds <- rbind(df_influenza, df_pollen, df_SAD, df_cold_weather, df_heatwave)
+consolidated <- rbind(df_influenza, df_pollen, df_SAD, df_cold_weather, df_heatwave)
 
 filename <- paste("TrendData/",  "Consolidate",
                   format(Sys.time(), "%b%d_%H%M_%Y"),'.csv', sep = "")
-write.csv(consolidateds, filename, fileEncoding = "UTF-8", row.names = FALSE)
+write.csv(consolidated, filename, fileEncoding = "UTF-8", row.names = FALSE)
 
 # Check the structure of your data
-str(consolidateds)
+str(consolidated)
 
 # Convert `time` to Date format if necessary
-consolidateds$date <- as.Date(consolidateds$date)
+consolidated$date <- as.Date(consolidated$date)
 
-# Assuming `consolidateds` has a `date` column in Date format and `hits` column
-consolidateds <- consolidateds %>%
-  mutate(month = floor_date(as.Date(date), "month")) %>%  # Create a month column
+# Assuming `consolidated` has a `date` column in Date format and `hits` column
+consolidated <- consolidated %>%
+  mutate(month = floor_date(as.Date(date), "month"),  # Create a month column
+         month_name = format(as.Date(month), "%B")) %>%  # Add a column with full month names
   group_by(month)  # Group by the month column
 
-# Add a column with full month names
-consolidateds <- consolidateds %>%
-  mutate(month_name = format(as.Date(month), "%B"))  # "%B" gives the full month name
+# Drop the unnecessary columns
+consolidated <- consolidated %>%
+  ungroup() %>%  # Ungroup the data
+  select(-geo, -category, -gprop, -month)  # Remove the unnecessary columns
 
-consolidateds$geo <- NULL
-consolidateds$category <- NULL
-consolidateds$gprop <- NULL
-consolidateds$month <- NULL
+# Define the symptoms and their corresponding keywords
+symptom_keywords <- list(
+  Influenza = c("influenza", "flu"),
+  pollen_allergies = c("pollen", "allergies"),
+  SAD = c("depression", "sleep disorder"),
+  cold_weather = c("dry skin", "hypothermia"),
+  heatwave = c("dehydration", "sun burn")
+)
 
-
-consolidateds <- consolidateds %>%
-  mutate(Influenza = ifelse(keyword %in% c("influenza", "flu"), hits, NA)) %>%
-  group_by(month_name) %>%  # Group by month_name
-  mutate(Influenza = mean(Influenza, na.rm = TRUE)) %>%
-  ungroup()
-
-consolidateds <- consolidateds %>%
-  mutate(Pollen_allergies = ifelse(keyword %in% c("pollen", "allergies"), hits, NA)) %>%
-  group_by(month_name) %>%  # Group by month_name
-  mutate(Pollen_allergies = mean(Pollen_allergies, na.rm = TRUE)) %>%
-  ungroup()
-
-consolidateds <- consolidateds %>%
-  mutate(SAD = ifelse(keyword %in% c("depression", "sleep disorder"), hits, NA)) %>%
-  group_by(month_name) %>%  # Group by month_name
-  mutate(SAD = mean(SAD, na.rm = TRUE)) %>%
-  ungroup()
-
-consolidateds <- consolidateds %>%
-  mutate(cold_weather = ifelse(keyword %in% c("dry skin", "hypothermia"), hits, NA)) %>%
-  group_by(month_name) %>%  # Group by month_name
-  mutate(cold_weather = mean(cold_weather, na.rm = TRUE)) %>%
-  ungroup()
-
-consolidateds <- consolidateds %>%
-  mutate(heatwave = ifelse(keyword %in% c("dehydration", "sun burn"), hits, NA)) %>%
-  group_by(month_name) %>%  # Group by month_name
-  mutate(heatwave = mean(heatwave, na.rm = TRUE)) %>%
-  ungroup()
+# Loop through each symptom and calculate the mean hits
+for (symptom in names(symptom_keywords)) {
+  consolidated <- consolidated %>%
+    mutate(!!symptom := ifelse(keyword %in% symptom_keywords[[symptom]], hits, NA)) %>%
+    group_by(month_name) %>%
+    mutate(!!symptom := mean(!!sym(symptom), na.rm = TRUE)) %>%
+    ungroup()
+}
 
 # Prepare data by summarizing as needed
-summary_datas <- consolidateds %>%
+summary_data <- consolidated %>%
   group_by(month_name) %>%
   summarize(
     Influenza = unique(Influenza),          # Ensure consistency
@@ -149,11 +128,11 @@ summary_datas <- consolidateds %>%
   )
 
 # Convert month_name to an ordered factor to ensure proper time-series ordering
-summary_datas <- summary_datas %>%
+summary_data <- summary_data %>%
   mutate(month_name = factor(month_name, levels = c("1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月")))
 
-# Create the time series plot
-ggplot(summary_datas, aes(x = month_name)) +
+# Create the time series plots for each symptoms using ggplot2
+ggplot(summary_data, aes(x = month_name)) +
   # Line and point for Influenza
   geom_line(aes(y = Influenza, color = "Influenza"), linewidth = 1) +  
   geom_point(aes(y = Influenza, color = "Influenza"), size = 3) +
@@ -190,12 +169,11 @@ filename <- paste("TrendData/",  "Summary Datas",
                   format(Sys.time(), "%b%d_%H%M_%Y"),'.csv', sep = "")
 write.csv(summary_datas, filename, fileEncoding = "UTF-8", row.names = FALSE)
 
-
 # Save the plot as a PNG file
 ggsave("TimeSeriesPlot.png", width = 8, height = 6, dpi = 300)
 
-# ARIMA Prediction
 
+# ARIMA Prediction
 ####################################
 #
 # Time Series Analysis Using ARIMA Model
@@ -207,31 +185,26 @@ ggsave("TimeSeriesPlot.png", width = 8, height = 6, dpi = 300)
  
 # Step 1: Convert Data to a Time Series Object
 # Sum the two keywords for each disease of the diseases to create a time series object
-influenza_cons <- df_influenza %>%
-  filter(keyword %in% c("flu", "influenza")) %>%  # Filter rows for "flu" and "influenza"
-  group_by(date) %>%  # Group by the "date" column
-  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
+# Initialize an empty list to store the results
+consolidated_list <- list()
 
-pollen_cons <- df_pollen %>%
-  filter(keyword %in% c("pollen", "allergies")) %>%  # Filter rows for "pollen" and "allergies"
-  group_by(date) %>%  # Group by the "date" column
-  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
+# Loop through each symptom and calculate the average hits
+for (symptom in names(symptom_keywords)) {
+  df_name <- paste0("df_", tolower(symptom))
+  df <- get(df_name)
+  
+  consolidated_list[[symptom]] <- df %>%
+    filter(keyword %in% symptom_keywords[[symptom]]) %>%
+    group_by(date) %>%
+    summarize(avg.hits = mean(hits, na.rm = TRUE))
+}
 
-SAD_cons <- df_SAD %>%
-  filter(keyword %in% c("depression", "sleep disorder")) %>%  # Filter rows for "depression" and "sleep disorder"
-  group_by(date) %>%  # Group by the "date" column
-  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
-
-cold_weather_cons <- df_cold_weather %>%
-  filter(keyword %in% c("dry skin", "hypothermia")) %>%  # Filter rows for "dry skin" and "hypothermia"
-  group_by(date) %>%  # Group by the "date" column
-  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
-
-heatwave_cons <- df_heatwave %>%
-  filter(keyword %in% c("dehydration", "sunburn")) %>%  # Filter rows for "dehydration" and "sunburn"
-  group_by(date) %>%  # Group by the "date" column
-  summarize(avg.hits = mean(hits, na.rm = TRUE))  # Calculate the average of "hits"
-
+# Access the consolidated data for each symptom
+influenza_cons <- consolidated_list$Influenza
+pollen_cons <- consolidated_list$Pollen_allergies
+SAD_cons <- consolidated_list$SAD
+cold_weather_cons <- consolidated_list$cold_weather
+heatwave_cons <- consolidated_list$heatwave
 
 # Convert the data to time series format (assuming 'value' column contains the data)
 influenza_ts <- ts(influenza_cons$avg.hits, start = c(2022, 1), frequency = 52.18)
@@ -299,7 +272,6 @@ plot(SAD_ts, main = "SAD Time Series", xlab = "Time", ylab = "SAD Count")
 plot(cold_weather_ts, main = "Cold Weather Time Series", xlab = "Time", ylab = "Cold Weather Count")
 plot(heatwave_ts, main = "Heatwave Time Series", xlab = "Time", ylab = "Heatwave Count")
 
-
 # Fit ARIMA model for eacg of the disease
 arima_pollen <- auto.arima(pollen_ts)
 arima_influenza <- auto.arima(influenza_ts)
@@ -334,7 +306,5 @@ accuracy(forecast_pollen)
 accuracy(forecast_influenza)
 accuracy(forecast_SAD)
 accuracy(forecast_cold_weather)
-(forecast_heatwave)
-
-
+accuracy(forecast_heatwave)
 
