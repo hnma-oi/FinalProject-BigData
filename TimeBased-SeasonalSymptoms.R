@@ -392,15 +392,41 @@ plot(Forecast_oct_dec_Heatwave, main = "Heatwave Search Volume ARIMA Forecast Va
      xlab = "Time", ylab = "Average Hits", col = "yellow", type = "o")
 dev.off()
 
-# Create a ggplot object
-p <- ggplot(Forecast_oct_dec_Influenza, aes(x = date, y = avg.hits)) +
-     geom_line() +
-     labs(title = "Influenza Search Volume", x = "Date", y = "Average Hits")
+# Filter data from October to December 2024
+Actual_Influenza <- subset(Influenza_cons, date >= as.Date("2024-10-01") & date <= as.Date("2024-12-31"))
 
-# Save the plot
-ggsave("my_ggplot.png", plot = p, width = 8, height = 6, dpi = 300)
+# Print the filtered data
+print(Actual_Influenza)
 
-predicted_values <- forecast_oct_dec_Influenza$mean
+# Extract 95% prediction intervals
+lower_bound <- Forecast_oct_dec_Influenza$lower[, 2]  # 95% lower bound
+upper_bound <- Forecast_oct_dec_Influenza$upper[, 2]  # 95% upper bound
 
-# Print the predicted values
-print(predicted_values)
+length(seq(as.Date("2024-10-01"), as.Date("2024-12-31"), by = "week"))  # Length of dates
+length(Forecast_oct_dec_Influenza)  # Predicted values
+length(Actual_Influenza)  # Actual data
+length(lower_bound)  # Lower bound of prediction interval
+length(upper_bound)  # Upper bound of prediction interval
+
+length(comparison$Actual.avg.hits)
+length(comparison$Lower_95)
+length(comparison$Upper_95)
+
+# Combine into a data frame with actual data
+comparison <- data.frame(
+  Date = seq(as.Date("2024-10-07"), as.Date("2024-12-31"), by = "week"),
+  Predicted = Forecast_oct_dec_Influenza,
+  Actual = Actual_Influenza,
+  Lower_95 = lower_bound,
+  Upper_95 = upper_bound
+)
+
+# Check how many actual values lie within the prediction intervals
+within_bounds <- sum(comparison$Actual.avg.hits >= comparison$Lower_95 & comparison$Actual.avg.hits <= comparison$Upper_95)
+total_points <- nrow(comparison)
+percentage_within_bounds <- (within_bounds / total_points) * 100
+
+print(paste("Percentage of actual values within 95% prediction interval:", round(percentage_within_bounds, 2), "%"))
+
+
+
